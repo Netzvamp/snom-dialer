@@ -1,0 +1,6 @@
+requests==2.*
+pyside2==5.15.*
+QtAwesome==1.0.*
+pynput==1.7.*
+pywin32==300
+pyinstaller==4.2
