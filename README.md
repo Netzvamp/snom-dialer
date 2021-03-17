@@ -31,11 +31,11 @@ It's also possible to change the global hotkeys.
 
 Then start it again. You'll see a trayicon ... this is only show you it's running.
 
-* Press the global hotkey combination (defaults to <ctrl> + <alt> + s)
+* Press the global hotkey combination (defaults to \<ctrl\> + \<alt\> + s)
 * A window with an input field pops up.
 * Insert the phone number you want to dial and press the enter key. The window will disappear.
 * Your phone will call the number.
-* Press the hangup hotkey (default to <ctrl> + <alt> + x) to hangup the call 
+* Press the hangup hotkey (default to \<ctrl\> + \<alt\> + x) to hangup the call 
 
 ### Advanced features
 
@@ -48,3 +48,16 @@ If you add a semicolon by yourself, the numbers don't got split, and you can use
 
 #### Example
 * <code>9;1;9;6;ENTER,,1000;*,1000,2000;#,,1000;9</code> Dial 9196, wait 1000ms and press * (and hold the key for 1000ms), #, 9 to generate DTMF tones inside a call.
+
+## Batchmode
+
+    usage: snom-dialer.py [-h] command [parameter]
+    
+    Snom remote dialer
+    
+    positional arguments:
+      command     One of dial, keyevent, hangup or hangup_all
+      parameter   Optional parameter to command
+    
+    optional arguments:
+      -h, --help  show this help message and exit

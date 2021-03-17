@@ -25,16 +25,15 @@ from pynput import keyboard
 import win32gui, win32con, win32api
 
 import qtawesome as qta
-
-import requests
-from requests.auth import HTTPDigestAuth
-requests.packages.urllib3.disable_warnings()
+from snom import Snom
 
 
 class DialWindow(QMainWindow):
     def __init__(self, configuration):
         super().__init__()
         self.config = configuration
+
+        self.snom = Snom(ip=self.config['ip'], username=self.config['username'], password=self.config['password'])
 
         self.window_title = "Snom Dialer"
         self.setWindowTitle(self.window_title)
@@ -80,22 +79,14 @@ class DialWindow(QMainWindow):
     def dial(self):
         if self.shift_pressed:
             if ";" in self.number_input.text():  # send raw keyevent
-                number = self.number_input.text().replace("#", "%23").replace("*", "%2A")
+                self.snom.key_events(self.number_input.text().replace("#", "%23").replace("*", "%2A"))
             else:
-                number = ";".join(self.number_input.text()).replace("#", "%23").replace("*", "%2A")
-            url = f"https://{self.config['ip']}/command.htm?key={number}"
+                self.snom.key_events(";".join(self.number_input.text()).replace("#", "%23").replace("*", "%2A"))
         else:
-            number = self.number_input.text().replace("#", "%23").replace("*", "%2A")
-            url = f"https://{self.config['ip']}/command.htm?number={number}"
-            # self.hide()
-        requests.post(url, auth=HTTPDigestAuth(self.config['username'], self.config['password']), verify=False)
+            self.snom.dial(self.number_input.text().replace("#", "%23").replace("*", "%2A"))
 
     def hangup(self):
-        requests.post(
-            f"https://{self.config['ip']}/command.htm?key=CANCEL",
-            auth=HTTPDigestAuth(self.config['username'], self.config['password']),
-            verify=False
-        )
+        self.snom.hangup_all()
 
     def show(self):
         super().show()
@@ -168,11 +159,6 @@ class HotKeys(QThread):
 
 if __name__ == '__main__':
 
-    app = QApplication(sys.argv)
-    app.setQuitOnLastWindowClosed(False)
-    icon = qta.icon("fa.phone-square", options=[{'color': 'green', 'scale_factor': 1.3}])
-    app.setWindowIcon(icon)
-
     conf_file = os.path.join(os.getcwd(), "config.json")
 
     if os.path.isfile(conf_file):
@@ -197,6 +183,36 @@ if __name__ == '__main__':
             "Error"
         )
         sys.exit(-1)
+
+    if len(sys.argv) > 1:  # batchmode
+        import argparse
+
+        parser = argparse.ArgumentParser(description="Snom remote dialer")
+        parser.add_argument("command", type=str, help="One of dial, keyevent, hangup or hangup_all")
+        parser.add_argument("parameter", type=str, help="Optional parameter to command", nargs='?')
+        args = parser.parse_args()
+
+        snom = Snom(ip=config["ip"], username=config["username"], password=config["password"])
+
+        if args.command == "dial" and args.parameter:
+            snom.dial(args.parameter)
+        elif args.command == "keyevent" and args.parameter:
+            snom.key_events(args.parameter)
+        elif args.command == "hangup":
+            snom.hangup()
+        elif args.command == "hangup_all":
+            snom.hangup_all()
+        else:
+            print("ERROR: Couldn't parse parameters.\n")
+            parser.parse_args(['-h'])
+
+
+        sys.exit()
+
+    app = QApplication(sys.argv)
+    app.setQuitOnLastWindowClosed(False)
+    icon = qta.icon("fa.phone-square", options=[{'color': 'green', 'scale_factor': 1.3}])
+    app.setWindowIcon(icon)
 
     mainwindow = DialWindow(config)
     tray = TrayIcon(icon, mainwindow)
