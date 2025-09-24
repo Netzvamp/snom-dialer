@@ -63,7 +63,7 @@ class IncomingCallDialog(QDialog):
     def __init__(self, mainwindow: QMainWindow):
         super().__init__(mainwindow)
         self._mw = mainwindow
-        self.setWindowTitle("Incoming Call")
+        self.setWindowTitle("Call info")
         self.setModal(False)
         self.setWindowFlags(self.windowFlags() | Qt.WindowStaysOnTopHint)
 

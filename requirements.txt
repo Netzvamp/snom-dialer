@@ -1,6 +1,8 @@
 requests==2.*
-pyside2==5.15.*
-QtAwesome==1.0.*
-pynput==1.7.*
-pywin32==300
-pyinstaller==4.2
+PySide6-Essentials==6.9.*
+QtAwesome==1.4.*
+pynput==1.8.*
+pywin32==311
+pyinstaller==6.16.*
+Flask==3.*
+Werkzeug==3.*
