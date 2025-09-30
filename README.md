@@ -52,7 +52,7 @@ Tray and window:
 
 Hotkeys:
 - Show Window: default <ctrl>+<alt>+s
-- Hangup: default <ctrl>+<alt>+x
+- Hangup: default <ctrl>+<alt>+x 
 
 Action URLs – phone integration:
 - The app starts a local Action URL callback server and configures your phone automatically.
