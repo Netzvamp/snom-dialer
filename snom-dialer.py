@@ -55,6 +55,114 @@ def save_config_file(path: str, config: dict) -> None:
         json.dump(config, f, indent=4)
 
 
+def _is_windows() -> bool:
+    """
+    Return True if the application is running on a Windows platform.
+    """
+    return sys.platform.startswith("win")
+
+
+def _is_frozen_executable() -> bool:
+    """
+    Return True if running as a frozen executable (e.g., packaged via PyInstaller).
+    """
+    return bool(getattr(sys, "frozen", False))
+
+
+def _autostart_value_name() -> str:
+    """
+    Registry value name used for Windows autostart.
+    """
+    return "SnomDialer"
+
+
+def _autostart_command() -> str:
+    """
+    Compute the command for the Windows 'Run' registry key.
+
+    Uses the frozen executable if the app is packaged; otherwise attempts to
+    use pythonw.exe (if available) to avoid a console window and falls back
+    to sys.executable.
+    """
+    if getattr(sys, "frozen", False):
+        return f'"{sys.executable}"'
+    script = os.path.abspath(sys.argv[0])
+    exe = sys.executable
+    if exe.lower().endswith("python.exe"):
+        candidate = os.path.join(os.path.dirname(exe), "pythonw.exe")
+        if os.path.exists(candidate):
+            exe = candidate
+    return f'"{exe}" "{script}"'
+
+
+def windows_autostart_is_enabled() -> bool:
+    """
+    Check the current Windows autostart status by reading HKCU Run.
+    Only considered when running as a frozen executable.
+    """
+    if not _is_windows() or not _is_frozen_executable():
+        return False
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_READ,
+        ) as key:
+            value, _ = winreg.QueryValueEx(key, _autostart_value_name())
+            return isinstance(value, str) and len(value) > 0
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+
+
+def set_windows_autostart(enabled: bool) -> tuple[bool, str]:
+    """
+    Enable or disable Windows autostart via HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run.
+    Only applied when running as a frozen executable. Otherwise, simulated.
+
+    Returns
+    -------
+    tuple[bool, str]
+        (True, "OK") if successful, otherwise (False, error_message).
+    """
+    if not _is_windows():
+        return False, "Autostart is only available on Windows"
+
+    if not _is_frozen_executable():
+        cmd = _autostart_command()
+        action = "enable" if enabled else "disable"
+        logger.info(
+            "Autostart change skipped (not a packaged executable). "
+            f"Would {action} with command: {cmd}"
+        )
+        return True, "Simulated (not a frozen executable)"
+    try:
+        import winreg
+        with winreg.OpenKey(
+            winreg.HKEY_CURRENT_USER,
+            r"Software\Microsoft\Windows\CurrentVersion\Run",
+            0,
+            winreg.KEY_SET_VALUE,
+        ) as key:
+            if enabled:
+                cmd = _autostart_command()
+                winreg.SetValueEx(key, _autostart_value_name(), 0, winreg.REG_SZ, cmd)
+                logger.info(f"Enabled Windows autostart: {cmd}")
+            else:
+                try:
+                    winreg.DeleteValue(key, _autostart_value_name())
+                    logger.info("Disabled Windows autostart")
+                except FileNotFoundError:
+                    logger.info("Windows autostart not set; nothing to disable")
+        return True, "OK"
+    except OSError as exc:
+        logger.error(f"Failed to update Windows autostart: {exc}")
+        return False, str(exc)
+
+
 class IncomingCallDialog(QDialog):
     """
     Non-modal popup showing incoming call information with a hangup button.
@@ -706,6 +814,22 @@ class SettingsDialog(QDialog):
         form.addRow(QLabel("Hotkey Hangup:"), self.hk_hangup_edit)
         form.addRow(QLabel("Web server port:"), self.web_port_edit)
 
+        self.autostart_chk = QCheckBox("Start with Windows")
+        if _is_windows():
+            try:
+                self.autostart_chk.setChecked(windows_autostart_is_enabled())
+            except Exception as exc:
+                logger.debug(f"Unable to read Windows autostart state: {exc}")
+                self.autostart_chk.setChecked(
+                    bool(self._mw.config.get("windows_autostart", False))
+                )
+            if not _is_frozen_executable():
+                self.autostart_chk.setEnabled(False)
+                self.autostart_chk.setToolTip(
+                    "Autostart is only available when running a packaged executable."
+                )
+            form.addRow(QLabel("Autostart:"), self.autostart_chk)
+
         self.button_box = QDialogButtonBox()
         self.btn_save = self.button_box.addButton("Save", QDialogButtonBox.AcceptRole)
         self.btn_test = self.button_box.addButton("Test", QDialogButtonBox.ActionRole)
@@ -818,6 +942,7 @@ class SettingsDialog(QDialog):
             "hotkey_show_window": self.hk_show_edit.text().strip(),
             "hotkey_hangup": self.hk_hangup_edit.text().strip(),
             "web_port": int(self.web_port_edit.text().strip() or str(DEFAULT_WEB_PORT)),
+            "windows_autostart": self.autostart_chk.isChecked() if _is_windows() else False,
             "action_url_incoming": self.au_incoming_edit.text().strip(),
             "action_url_connected": self.au_connected_edit.text().strip(),
             "action_url_outgoing": self.au_outgoing_edit.text().strip(),
@@ -915,6 +1040,12 @@ class SettingsDialog(QDialog):
             self._mw.restart_hotkeys()
             self._mw.restart_action_server()
             logger.info("Settings saved and hotkeys restarted")
+            if _is_windows():
+                desired = cfg.get("windows_autostart", False)
+                ok_auto, msg_auto = set_windows_autostart(desired)
+                if not ok_auto:
+                    logger.warning(f"Updating Windows autostart failed: {msg_auto}")
+                    QMessageBox.warning(self, "Autostart", f"Updating Windows autostart failed: {msg_auto}")
             QMessageBox.information(self, "Settings saved", "Configuration updated successfully.")
             self.accept()
         except Exception as exc:
@@ -1098,6 +1229,7 @@ if __name__ == '__main__':
             "action_url_offhook_open_browser": False,
             "recent_numbers": [],
             "window_width": 500,
+            "windows_autostart": False,
         }
 
     # Configure logging (uses RichHandler if available)

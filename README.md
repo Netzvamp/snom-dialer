@@ -1,5 +1,6 @@
 # Snom dialer
 
+![Snom Dialer screenshot](screenshot.png)
 
 A small tool for dialing with a snom desktop phone. Tested on Snom 320 and Snom D385. 
 
